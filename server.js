@@ -1,10 +1,17 @@
 require("dotenv").config();
 const express = require("express");
-const morgan = require("morgan");
 
-console.log(process.env.API_TOKEN);
+const morganSetting = process.env.NODE_ENV === "production" ? "tiny" : "common";
+const morgan = require("morgan");
+const helmet = require("helmet");
+const cors = require("cors");
+
+const POKEDEX = require("./pokedex.json");
+
 const app = express();
-app.use(morgan("dev"));
+app.use(morgan(morganSetting));
+app.use(helmet());
+app.use(cors());
 
 const validTypes = [
   `Bug`,
@@ -29,14 +36,10 @@ const validTypes = [
 
 app.use(function validateBearerToken(req, res, next) {
   const apiToken = process.env.API_TOKEN;
-  const { Authorization } = req.headers;
-  console.log(Authorization);
   const authToken = req.get("Authorization");
-  console.log(authToken);
   if (!authToken || authToken.split(" ")[1] !== apiToken) {
     return res.status(401).json({ error: "Unauthorized request" });
   }
-  // move to the next middleware
   next();
 });
 
@@ -47,13 +50,35 @@ function handleGetTypes(req, res) {
 app.get("/types", handleGetTypes);
 
 function handleGetPokemon(req, res) {
-  res.send("Hello, Pokemon!");
+  const response = POKEDEX.pokemon;
+  const { name, type } = req.query;
+
+  let returnedList;
+  if (name) {
+    returnedList = response.filter((pokemon) =>
+      pokemon.name.toLowerCase().includes(name.toLowerCase())
+    );
+  }
+
+  if (type) {
+    returnedList = response.filter((pokemon) => pokemon.type.includes(type));
+  }
+
+  res.json(returnedList);
 }
 
 app.get("/pokemon", handleGetPokemon);
 
-const PORT = 8000;
-
-app.listen(PORT, () => {
-  console.log(`Server listening at http://localhost:${PORT}`);
+app.use((error, req, res, next) => {
+  let response;
+  if (process.env.NODE_ENV === "production") {
+    response = { error: { message: "server error" } };
+  } else {
+    response = { error };
+  }
+  res.status(500).json(response);
 });
+
+const PORT = app.env.PORT || 8000;
+
+app.listen(PORT);
